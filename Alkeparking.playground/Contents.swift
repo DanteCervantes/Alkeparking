@@ -23,32 +23,52 @@ enum VehicleType {
     }
 }
 
-struct Parking {
-    var vehicles: Set<Vehicle> = []
-    private let maxCars = 20
-    var vehiclesProfits = (vehicle: 0, profits: 0)
+enum CheckinStatus {
+    case parkingFull
+    case vehicleAlreadyRegistered
+    case success
     
-    mutating func checkInVehicle(_ vehicle: Vehicle, onFinish: (Bool) -> Void) {
-        guard vehicles.count < maxCars || vehicles.contains(vehicle)  else {
-            return onFinish(false)
+    var loclizedDescription: String {
+        switch self {
+        case .parkingFull: return "Sorry,the check-in failed: parking full"
+        case .vehicleAlreadyRegistered: return "Sorry, the check-in failed: vehicle already registered"
+        case .success: return "Welcome to Alkeparking"
+        }
+    }
+}
+
+struct Parking {
+    private (set) var vehicles: Set<Vehicle> = []
+    private let maxCars = 20
+    private (set) var vehiclesProfits = (vehicle: 0, profits: 0)
+    
+    mutating func checkInVehicle(_ vehicle: Vehicle, onFinish: (CheckinStatus) -> Void) {
+        guard hasParkingPlace() else {
+            return onFinish(CheckinStatus.parkingFull)
         }
         
-        let insertedSuccess = vehicles.insert(vehicle).inserted
-        return onFinish(insertedSuccess)
+        guard !vehicleHasAlreadyRegistered(vehicle) else {
+            return onFinish(CheckinStatus.vehicleAlreadyRegistered)
+        }
+        
+        vehicles.insert(vehicle).inserted
+        onFinish(CheckinStatus.success)
     }
     
     private func calculateFee(type: VehicleType, parkedTime: Int, hasDiscount: Bool) -> Int{
         var fee = 0
+        let baseFee = type.rate
         
-        if parkedTime <= 120 {
-            fee = type.rate
+        if parkedTime > 120{
+            fee = baseFee + getFractionFee(parkedTime)
         } else {
-            fee = type.rate + (getFraction(parkedTime: parkedTime) * 5)
+            fee = baseFee
         }
         
-        if hasDiscount {
-            return Int(Double(fee) - Double(fee) * 0.15)
+        if hasDiscount{
+            fee = Int(Double(fee) * 0.85)
         }
+        
         return fee
     }
     
@@ -72,15 +92,23 @@ struct Parking {
     }
     
     func getParkedPlates(){
-        for vehicle in vehicles {
+        vehicles.forEach { vehicle in
             print(vehicle.plate)
         }
     }
 }
 
 extension Parking {
-    private func getFraction(parkedTime: Int) -> Int{
-        Int((Double(parkedTime - 120) / 15.0).rounded(.up))
+    private func getFractionFee(_ parkedTime: Int) -> Int{
+        Int((Double(parkedTime - 120) / 15.0).rounded(.up) * 5)
+    }
+    
+    private func hasParkingPlace() -> Bool{
+        vehicles.count <= maxCars
+    }
+    
+    private func vehicleHasAlreadyRegistered(_ vehicle: Vehicle) -> Bool {
+        vehicles.contains(vehicle)
     }
 }
 
@@ -94,7 +122,7 @@ struct Vehicle: Parkable, Hashable {
     /*var parkedTime: Int {
      Calendar.current.dateComponents([.minute], from: checkInTime, to: Date()).minute ?? 0
      }*/
-    var parkedTime = 198
+    var parkedTime = 100
     
     func hash(into hasher: inout Hasher) {
         hasher.combine(plate)
@@ -113,6 +141,7 @@ let createdVehicles = [Vehicle(plate: "AA111AA", type: VehicleType.car, discount
                        Vehicle(plate: "DD444DD", type: VehicleType.bus, discountCard: "DISCOUNT_CARD_002"),
                        Vehicle(plate: "AA111BB", type: VehicleType.car, discountCard: "DISCOUNT_CARD_003"),
                        Vehicle(plate: "B222CCC", type: VehicleType.motorcycle, discountCard: "DISCOUNT_CARD_004"),
+                       Vehicle(plate: "B222CCC", type: VehicleType.motorcycle, discountCard: "DISCOUNT_CARD_004"),
                        Vehicle(plate: "CC333DD", type: VehicleType.miniBus, discountCard: nil),
                        Vehicle(plate: "DD444EE", type: VehicleType.bus, discountCard: "DISCOUNT_CARD_005"),
                        Vehicle(plate: "AA111CC", type: VehicleType.car, discountCard: nil),
@@ -127,23 +156,24 @@ let createdVehicles = [Vehicle(plate: "AA111AA", type: VehicleType.car, discount
                        Vehicle(plate: "AA111DF", type: VehicleType.car, discountCard: "DISCOUNT_CARD_009"),
                        Vehicle(plate: "AA111DR", type: VehicleType.car, discountCard: nil),
                        Vehicle(plate: "AA111DY", type: VehicleType.car,  discountCard: nil),
-                       Vehicle(plate: "AA11SDY", type: VehicleType.car,  discountCard: nil)]
+                       Vehicle(plate: "AA11SDY", type: VehicleType.car,  discountCard: nil),
+                       Vehicle(plate: "AA11SJDY", type: VehicleType.car,  discountCard: nil)]
 
-for vehicle in createdVehicles {
+createdVehicles.forEach { vehicle in
     alkeParking.checkInVehicle(vehicle) { result in
-        result ? print("Welcome to Alkeparking") : print("Sorry, the check-in failed")
+        print("\(result.loclizedDescription), plate: \(vehicle.plate)")
     }
 }
 
 alkeParking.checkOutVehicle(plate: createdVehicles[0].plate) { fee in
-    print("Your fee is $\(fee). Come back soon")
+    print("Your fee is $\(fee), parking time: \(createdVehicles[0].parkedTime). Come back soon")
     return fee
 } onError: {
     print("Sorry, the check-out failed")
 }
 
 alkeParking.checkOutVehicle(plate: createdVehicles[8].plate) { fee in
-    print("Your fee is $\(fee). Come back soon")
+    print("Your fee is $\(fee), parking time: \(createdVehicles[0].parkedTime). Come back soon")
     return fee
 } onError: {
     print("Sorry, the check-out failed")
@@ -151,6 +181,3 @@ alkeParking.checkOutVehicle(plate: createdVehicles[8].plate) { fee in
 
 alkeParking.getProfits()
 alkeParking.getParkedPlates()
-
-
-
